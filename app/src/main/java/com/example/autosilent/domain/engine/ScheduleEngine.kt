@@ -249,9 +249,17 @@ object ScheduleEngine {
             }
         }
 
+        // Deterministic tie-breaking rule:
+        // 1. Primary: triggerInstant ascending (earliest event first)
+        // 2. Secondary: BoundaryType ordinal ascending (START before END)
+        // 3. Tertiary: scheduleId ascending
+        val eventComparator = compareBy<BoundaryEvent> { it.triggerInstant }
+            .thenBy { it.type }
+            .thenBy { it.scheduleId }
+
         return candidateEvents
             .filter { it.triggerInstant.isAfter(afterInstant) }
-            .minByOrNull { it.triggerInstant }
+            .minWithOrNull(eventComparator)
     }
 
     /**
