@@ -25,6 +25,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".scheduler.AlarmReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>
