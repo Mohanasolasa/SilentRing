@@ -1,0 +1,1 @@
+# Auto Silent Proguard Rules
