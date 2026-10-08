@@ -17,14 +17,26 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        val event = AndroidAlarmScheduler.parseEventFromIntent(intent) ?: return
+        val event = AndroidAlarmScheduler.parseEventFromIntent(intent)
+        if (event == null) {
+            DiagnosticLogger.w("AutoSilentDiag", "ALARM_RECEIVED_UNPARSEABLE: intent action=${intent.action}, data=${intent.data}")
+            return
+        }
+
+        val actualReceiverTime = Instant.now()
+        val latencyMillis = actualReceiverTime.toEpochMilli() - event.triggerInstant.toEpochMilli()
+        DiagnosticLogger.i(
+            "AutoSilentDiag",
+            "ALARM_RECEIVED: scheduleId=${event.scheduleId}, type=${event.type}, triggerInstant=${event.triggerInstant}, actualReceiverTime=$actualReceiverTime, latencyMs=$latencyMillis, occurrenceStart=${event.occurrenceStart}, occurrenceEnd=${event.occurrenceEnd}"
+        )
+
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 val app = context.applicationContext as? AutoSilentApplication
                 app?.reconciler?.reconcile(
-                    currentInstant = Instant.now(),
+                    currentInstant = actualReceiverTime,
                     zoneId = ZoneId.systemDefault(),
                     triggeredByEvent = event
                 )

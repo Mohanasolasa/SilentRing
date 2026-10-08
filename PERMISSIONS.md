@@ -30,6 +30,11 @@
      ```
    - If `canSchedule` is `false`, the UI displays a clear explanation card and provides a direct button launching `Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM`.
 
+### 1.3 Exact-Alarm Policy Requirements & Runtime Constraints
+* **Policy Rule**: Maintain `SCHEDULE_EXACT_ALARM`. Do NOT declare `USE_EXACT_ALARM` unless there is a separately justified and approved policy basis. Auto Silent is a sound scheduler, not a bedside alarm-clock or calendar application, so Google Play will reject attempts to misclassify it merely to obtain automatic exact-alarm privileges.
+* **Revocable Special Access**: `SCHEDULE_EXACT_ALARM` is user-controlled Special App Access (`AppOpsManager.OP_SCHEDULE_EXACT_ALARM`). Users can revoke it at any time in system settings. The application detects revocation dynamically via `canScheduleExactAlarms()` without crashing and presents informative UI guidance.
+* **Precision Limitation**: Android exact alarms via `setExactAndAllowWhileIdle()` operate under system resource constraints and are described by Google as *nearly precise* (typically executed within tens of milliseconds up to small latency deltas depending on CPU wake locks, power management, and Doze unbatching). They are NOT guaranteed to execute at the exact sub-millisecond instant.
+
 ---
 
 ## 2. Audio Control & Notification Policy Access (Do Not Disturb)

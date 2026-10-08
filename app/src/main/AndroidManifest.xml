@@ -27,7 +27,11 @@
 
         <receiver
             android:name=".scheduler.AlarmReceiver"
-            android:exported="false" />
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.autosilent.ACTION_ALARM_BOUNDARY" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

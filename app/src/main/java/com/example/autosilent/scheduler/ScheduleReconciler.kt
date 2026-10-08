@@ -41,13 +41,17 @@ class ScheduleReconciler(
         triggeredByEvent: BoundaryEvent? = null
     ): ScheduleEvaluation = mutex.withLock {
         // 1. Stale-event validation
+        var validationResult = "N/A"
         if (triggeredByEvent != null) {
             val triggeredSchedule = repository.getScheduleById(triggeredByEvent.scheduleId)
             val isEventValid = ScheduleEngine.isEventValid(triggeredByEvent, triggeredSchedule, zoneId)
-            if (!isEventValid) {
-                // Event is stale (schedule deleted, disabled, or modified).
-                // Do not act on stale event deltas. Reconcile current database state instead.
-            }
+            validationResult = if (isEventValid) "VALID" else "STALE_REJECTED"
+            DiagnosticLogger.i(
+                "AutoSilentDiag",
+                "RECONCILE_TRIGGER: scheduleId=${triggeredByEvent.scheduleId}, type=${triggeredByEvent.type}, expectedTrigger=${triggeredByEvent.triggerInstant}, actualTime=$currentInstant, occurrenceStart=${triggeredByEvent.occurrenceStart}, occurrenceEnd=${triggeredByEvent.occurrenceEnd}, validationResult=$validationResult"
+            )
+        } else {
+            DiagnosticLogger.i("AutoSilentDiag", "RECONCILE_MANUAL_OR_BOOT: evaluatedAt=$currentInstant")
         }
 
         // 2. Prune expired overrides whose occurrence end has passed
@@ -72,6 +76,11 @@ class ScheduleReconciler(
         evaluation.nextBoundaryEvent?.let { nextEvent ->
             alarmScheduler.scheduleBoundaryEvent(nextEvent)
         }
+
+        DiagnosticLogger.i(
+            "AutoSilentDiag",
+            "RECONCILE_COMPLETED: desiredSoundMode=${evaluation.desiredSoundMode}, activeCount=${evaluation.activeOccurrences.size}, nextBoundary=${evaluation.nextBoundaryEvent?.let { "scheduleId=${it.scheduleId}, type=${it.type}, trigger=${it.triggerInstant}" } ?: "NONE"}"
+        )
 
         // 7. Update reactive state flow
         _currentEvaluation.value = evaluation

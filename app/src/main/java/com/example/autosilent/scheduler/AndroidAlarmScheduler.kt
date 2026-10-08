@@ -19,16 +19,22 @@ class AndroidAlarmScheduler(
 
     override fun canScheduleExactAlarms(): Boolean {
         if (alarmManager == null) return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager.canScheduleExactAlarms()
         } else {
             true
         }
+        DiagnosticLogger.i("AutoSilentDiag", "EXACT_ALARM_CHECK: canScheduleExactAlarms=$result, sdkInt=${Build.VERSION.SDK_INT}")
+        return result
     }
 
     override fun scheduleBoundaryEvent(event: BoundaryEvent): Boolean {
-        if (alarmManager == null) return false
+        if (alarmManager == null) {
+            DiagnosticLogger.w("AutoSilentDiag", "SCHEDULING_FAILED: AlarmManager is null")
+            return false
+        }
         if (!canScheduleExactAlarms()) {
+            DiagnosticLogger.w("AutoSilentDiag", "SCHEDULING_FAILED: canScheduleExactAlarms=false for scheduleId=${event.scheduleId}")
             return false
         }
 
@@ -39,14 +45,20 @@ class AndroidAlarmScheduler(
                 event.triggerInstant.toEpochMilli(),
                 pendingIntent
             )
+            DiagnosticLogger.i(
+                "AutoSilentDiag",
+                "SCHEDULING_SUCCESS: scheduleId=${event.scheduleId}, name=${event.scheduleName}, type=${event.type}, trigger=${event.triggerInstant}, occurrenceStart=${event.occurrenceStart}, occurrenceEnd=${event.occurrenceEnd}"
+            )
             return true
         } catch (e: SecurityException) {
+            DiagnosticLogger.e("AutoSilentDiag", "SCHEDULING_SECURITY_EXCEPTION: scheduleId=${event.scheduleId}", e)
             return false
         }
     }
 
     override fun cancelBoundaryEvent(scheduleId: Long, type: BoundaryType, occurrenceStart: Instant) {
         if (alarmManager == null) return
+        DiagnosticLogger.i("AutoSilentDiag", "CANCELLING_ALARM: scheduleId=$scheduleId, type=$type, occurrenceStart=$occurrenceStart")
         val pendingIntent = createCancelPendingIntent(scheduleId, type, occurrenceStart)
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
