@@ -24,6 +24,8 @@ class ScheduleReconciler(
 ) {
     private val mutex = Mutex()
 
+    private var currentScheduledBoundary: BoundaryEvent? = null
+
     private val _currentEvaluation = MutableStateFlow<ScheduleEvaluation?>(null)
     val currentEvaluation: StateFlow<ScheduleEvaluation?> = _currentEvaluation.asStateFlow()
 
@@ -41,11 +43,10 @@ class ScheduleReconciler(
         triggeredByEvent: BoundaryEvent? = null
     ): ScheduleEvaluation = mutex.withLock {
         // 1. Stale-event validation
-        var validationResult = "N/A"
         if (triggeredByEvent != null) {
             val triggeredSchedule = repository.getScheduleById(triggeredByEvent.scheduleId)
             val isEventValid = ScheduleEngine.isEventValid(triggeredByEvent, triggeredSchedule, zoneId)
-            validationResult = if (isEventValid) "VALID" else "STALE_REJECTED"
+            val validationResult = if (isEventValid) "VALID" else "STALE_REJECTED"
             DiagnosticLogger.i(
                 "AutoSilentDiag",
                 "RECONCILE_TRIGGER: scheduleId=${triggeredByEvent.scheduleId}, type=${triggeredByEvent.type}, expectedTrigger=${triggeredByEvent.triggerInstant}, actualTime=$currentInstant, occurrenceStart=${triggeredByEvent.occurrenceStart}, occurrenceEnd=${triggeredByEvent.occurrenceEnd}, validationResult=$validationResult"
@@ -72,9 +73,22 @@ class ScheduleReconciler(
         // 5. Apply target sound state via callback (to be connected to SoundController in Phase 8)
         onSoundModeChanged?.invoke(evaluation.desiredSoundMode)
 
-        // 6. Schedule the immediate next boundary event if present
-        evaluation.nextBoundaryEvent?.let { nextEvent ->
-            alarmScheduler.scheduleBoundaryEvent(nextEvent)
+        // 6. Schedule the immediate next boundary event if present, or cancel if none
+        if (evaluation.nextBoundaryEvent != null) {
+            val next = evaluation.nextBoundaryEvent
+            val prev = currentScheduledBoundary
+            if (prev != null && prev != next) {
+                alarmScheduler.cancelBoundaryEvent(prev.scheduleId, prev.type, prev.occurrenceStart)
+            }
+            alarmScheduler.scheduleBoundaryEvent(next)
+            currentScheduledBoundary = next
+        } else {
+            val prev = currentScheduledBoundary
+            if (prev != null) {
+                alarmScheduler.cancelBoundaryEvent(prev.scheduleId, prev.type, prev.occurrenceStart)
+            }
+            alarmScheduler.cancelAll()
+            currentScheduledBoundary = null
         }
 
         DiagnosticLogger.i(

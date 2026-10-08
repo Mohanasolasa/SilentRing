@@ -31,5 +31,20 @@ class AutoSilentApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        registerTimeChangeReceiver()
+    }
+
+    private fun registerTimeChangeReceiver() {
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_TIME_CHANGED)
+            addAction(android.content.Intent.ACTION_DATE_CHANGED)
+            addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        val receiver = com.example.autosilent.scheduler.TimeChangeReceiver()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
     }
 }

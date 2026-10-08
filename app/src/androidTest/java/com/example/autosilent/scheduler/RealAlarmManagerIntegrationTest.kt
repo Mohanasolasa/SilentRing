@@ -30,11 +30,24 @@ class RealAlarmManagerIntegrationTest {
     private lateinit var alarmScheduler: AndroidAlarmScheduler
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
         app = context as AutoSilentApplication
         alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmScheduler = AndroidAlarmScheduler(context)
+
+        try {
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .uiAutomation
+                .executeShellCommand("cmd appops set com.example.autosilent SCHEDULE_EXACT_ALARM allow")
+        } catch (t: Throwable) {
+            // Best effort in test runner
+        }
+
+        // Clean database state for isolation
+        app.repository.getSchedulesFlow().first().forEach { schedule ->
+            app.repository.deleteSchedule(schedule.id)
+        }
     }
 
     /**
@@ -552,5 +565,64 @@ class RealAlarmManagerIntegrationTest {
 
         // Clean up
         alarmScheduler.cancelBoundaryEvent(event.scheduleId, event.type, event.occurrenceStart)
+    }
+
+    /**
+     * Requirement 15: Android runtime BootReceiver test.
+     * Inserts a schedule in Room DB, triggers BootReceiver, and verifies state recovery and next boundary scheduling.
+     */
+    @Test
+    fun testBootReceiver_ReconcilesPersistentSchedules() = runBlocking {
+        val today = LocalDate.now()
+        val schedule = Schedule(
+            name = "Boot Schedule",
+            startTime = LocalTime.now().plusHours(1),
+            endTime = LocalTime.now().plusHours(2),
+            recurrenceType = RecurrenceType.DAILY,
+            startDate = today
+        )
+        val id = app.repository.insertSchedule(schedule)
+
+        val bootReceiver = BootReceiver()
+        val intent = Intent(Intent.ACTION_BOOT_COMPLETED)
+        bootReceiver.onReceive(context, intent)
+
+        kotlinx.coroutines.delay(1000)
+
+        val eval = app.reconciler.currentEvaluation.value
+        assertNotNull("Boot recovery must produce a non-null evaluation", eval)
+        assertEquals(id, eval?.nextBoundaryEvent?.scheduleId)
+
+        // Cleanup
+        app.repository.deleteSchedule(id)
+    }
+
+    /**
+     * Requirement 15: Android runtime TimeChangeReceiver test.
+     */
+    @Test
+    fun testTimeChangeReceiver_ReconcilesOnTimeBroadcast() = runBlocking {
+        val today = LocalDate.now()
+        val schedule = Schedule(
+            name = "TimeChange Schedule",
+            startTime = LocalTime.now().plusHours(2),
+            endTime = LocalTime.now().plusHours(3),
+            recurrenceType = RecurrenceType.DAILY,
+            startDate = today
+        )
+        val id = app.repository.insertSchedule(schedule)
+
+        val timeReceiver = TimeChangeReceiver()
+        val intent = Intent(Intent.ACTION_TIME_CHANGED)
+        timeReceiver.onReceive(context, intent)
+
+        kotlinx.coroutines.delay(1000)
+
+        val eval = app.reconciler.currentEvaluation.value
+        assertNotNull("Time change recovery must produce a non-null evaluation", eval)
+        assertEquals(id, eval?.nextBoundaryEvent?.scheduleId)
+
+        // Cleanup
+        app.repository.deleteSchedule(id)
     }
 }

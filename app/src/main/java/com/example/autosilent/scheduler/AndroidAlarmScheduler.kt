@@ -28,6 +28,8 @@ class AndroidAlarmScheduler(
         return result
     }
 
+    private var lastScheduledEvent: BoundaryEvent? = null
+
     override fun scheduleBoundaryEvent(event: BoundaryEvent): Boolean {
         if (alarmManager == null) {
             DiagnosticLogger.w("AutoSilentDiag", "SCHEDULING_FAILED: AlarmManager is null")
@@ -45,6 +47,7 @@ class AndroidAlarmScheduler(
                 event.triggerInstant.toEpochMilli(),
                 pendingIntent
             )
+            lastScheduledEvent = event
             DiagnosticLogger.i(
                 "AutoSilentDiag",
                 "SCHEDULING_SUCCESS: scheduleId=${event.scheduleId}, name=${event.scheduleName}, type=${event.type}, trigger=${event.triggerInstant}, occurrenceStart=${event.occurrenceStart}, occurrenceEnd=${event.occurrenceEnd}"
@@ -60,8 +63,13 @@ class AndroidAlarmScheduler(
         if (alarmManager == null) return
         DiagnosticLogger.i("AutoSilentDiag", "CANCELLING_ALARM: scheduleId=$scheduleId, type=$type, occurrenceStart=$occurrenceStart")
         val pendingIntent = createCancelPendingIntent(scheduleId, type, occurrenceStart)
-        alarmManager.cancel(pendingIntent)
-        pendingIntent.cancel()
+        if (pendingIntent != null) {
+            alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
+        if (lastScheduledEvent?.scheduleId == scheduleId && lastScheduledEvent?.type == type) {
+            lastScheduledEvent = null
+        }
     }
 
     override fun cancelAllForSchedule(scheduleId: Long) {
@@ -71,7 +79,10 @@ class AndroidAlarmScheduler(
     }
 
     override fun cancelAll() {
-        // Handled per-schedule or on demand
+        lastScheduledEvent?.let { prev ->
+            cancelBoundaryEvent(prev.scheduleId, prev.type, prev.occurrenceStart)
+            lastScheduledEvent = null
+        }
     }
 
     private fun createPendingIntent(event: BoundaryEvent): PendingIntent {
@@ -95,7 +106,7 @@ class AndroidAlarmScheduler(
         scheduleId: Long,
         type: BoundaryType,
         occurrenceStart: Instant
-    ): PendingIntent {
+    ): PendingIntent? {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_ALARM_BOUNDARY
             data = createEventUri(scheduleId, type, occurrenceStart)
