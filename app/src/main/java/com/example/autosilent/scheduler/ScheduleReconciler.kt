@@ -1,5 +1,6 @@
 package com.example.autosilent.scheduler
 
+import com.example.autosilent.domain.controller.SoundController
 import com.example.autosilent.domain.engine.ScheduleEngine
 import com.example.autosilent.domain.model.BoundaryEvent
 import com.example.autosilent.domain.model.ScheduleEvaluation
@@ -20,6 +21,7 @@ import java.time.ZoneId
 class ScheduleReconciler(
     private val repository: ScheduleRepository,
     private val alarmScheduler: AlarmScheduler,
+    private val soundController: SoundController = com.example.autosilent.domain.controller.NoOpSoundController,
     private val onSoundModeChanged: (suspend (SoundMode) -> Unit)? = null
 ) {
     private val mutex = Mutex()
@@ -70,7 +72,11 @@ class ScheduleReconciler(
             zoneId = zoneId
         )
 
-        // 5. Apply target sound state via callback (to be connected to SoundController in Phase 8)
+        // 5. Apply target sound state via SoundController
+        when (evaluation.desiredSoundMode) {
+            SoundMode.SILENT -> soundController.setSilent()
+            SoundMode.RING -> soundController.setRing()
+        }
         onSoundModeChanged?.invoke(evaluation.desiredSoundMode)
 
         // 6. Schedule the immediate next boundary event if present, or cancel if none

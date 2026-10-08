@@ -22,29 +22,21 @@ class AutoSilentApplication : Application() {
         AndroidAlarmScheduler(this)
     }
 
+    val soundController: com.example.autosilent.domain.controller.SoundController by lazy {
+        com.example.autosilent.system.AndroidSoundController(this)
+    }
+
     val reconciler: ScheduleReconciler by lazy {
         ScheduleReconciler(
             repository = repository,
-            alarmScheduler = alarmScheduler
+            alarmScheduler = alarmScheduler,
+            soundController = soundController
         )
     }
 
     override fun onCreate() {
         super.onCreate()
-        registerTimeChangeReceiver()
-    }
-
-    private fun registerTimeChangeReceiver() {
-        val filter = android.content.IntentFilter().apply {
-            addAction(android.content.Intent.ACTION_TIME_CHANGED)
-            addAction(android.content.Intent.ACTION_DATE_CHANGED)
-            addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
-        }
-        val receiver = com.example.autosilent.scheduler.TimeChangeReceiver()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(receiver, filter)
-        }
+        // Authoritative broadcast registration for TimeChangeReceiver is in AndroidManifest.xml.
+        // Dynamic registration removed to prevent duplicate broadcast delivery.
     }
 }

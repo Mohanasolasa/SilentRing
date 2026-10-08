@@ -123,8 +123,8 @@ object ScheduleEngine {
     ): Boolean {
         return overrides.any { override ->
             override.scheduleId == occurrence.scheduleId &&
-            override.occurrenceStart == occurrence.startInstant &&
-            override.occurrenceEnd == occurrence.endInstant &&
+            override.occurrenceStart.toEpochMilli() == occurrence.startInstant.toEpochMilli() &&
+            override.occurrenceEnd.toEpochMilli() == occurrence.endInstant.toEpochMilli() &&
             override.occurrenceEnd.isAfter(instant)
         }
     }
@@ -279,7 +279,7 @@ object ScheduleEngine {
         val expectedOccurrence = getOccurrenceInitiatedOnDate(schedule, startDate, zoneId)
             ?: return false
 
-        return expectedOccurrence.startInstant == event.occurrenceStart &&
-               expectedOccurrence.endInstant == event.occurrenceEnd
+        return expectedOccurrence.startInstant.toEpochMilli() == event.occurrenceStart.toEpochMilli() &&
+               expectedOccurrence.endInstant.toEpochMilli() == event.occurrenceEnd.toEpochMilli()
     }
 }
