@@ -1,12 +1,23 @@
 package com.example.autosilent.system
 
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import com.example.autosilent.domain.controller.SoundController
 import com.example.autosilent.domain.model.SoundMode
 import com.example.autosilent.scheduler.DiagnosticLogger
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Production Android implementation of [SoundController] using system [AudioManager].
@@ -34,11 +45,59 @@ class AndroidSoundController(
             DiagnosticLogger.w("AutoSilentSound", "AudioManager is null; defaulting getCurrentMode to RING")
             return SoundMode.RING
         }
-        return when (audioManager.ringerMode) {
-            AudioManager.RINGER_MODE_SILENT -> SoundMode.SILENT
+        val ringerMode = audioManager.ringerMode
+        val mode = when (ringerMode) {
+            AudioManager.RINGER_MODE_SILENT,
+            AudioManager.RINGER_MODE_VIBRATE -> SoundMode.SILENT
             else -> SoundMode.RING
         }
+        DiagnosticLogger.d("AutoSilentSound", "GET_CURRENT_MODE: ringerMode=$ringerMode, soundMode=$mode")
+        return mode
     }
+
+    override fun observeCurrentMode(): Flow<SoundMode> = callbackFlow {
+        // Emit current state immediately upon subscription
+        trySend(getCurrentMode())
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                if (intent?.action == AudioManager.RINGER_MODE_CHANGED_ACTION) {
+                    val mode = getCurrentMode()
+                    DiagnosticLogger.d(
+                        "AutoSilentSound",
+                        "RINGER_MODE_CHANGED_BROADCAST: intent received, currentMode=$mode"
+                    )
+                    trySend(mode)
+                }
+            }
+        }
+
+        val filter = IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION)
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+
+        // Lightweight periodic tick (2000ms) active only while actively collected (e.g. screen visible)
+        // to guard against OEM-specific cases where system broadcasts might be delayed by overlays.
+        val pollingJob = launch {
+            while (isActive) {
+                delay(2000)
+                trySend(getCurrentMode())
+            }
+        }
+
+        awaitClose {
+            pollingJob.cancel()
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                DiagnosticLogger.w("AutoSilentSound", "Failed to unregister ringer receiver: ${e.message}")
+            }
+        }
+    }.distinctUntilChanged()
 
     override fun canControlSound(): Boolean {
         if (audioManager == null) return false

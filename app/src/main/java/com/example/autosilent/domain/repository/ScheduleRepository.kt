@@ -22,4 +22,5 @@ interface ScheduleRepository {
     fun getActiveOverridesFlow(now: Instant): Flow<List<OccurrenceOverride>>
     suspend fun pruneExpiredOverrides(now: Instant): Int
     suspend fun deleteOverridesForSchedule(scheduleId: Long): Int
+    suspend fun deleteOverride(scheduleId: Long, occurrenceStart: Instant): Int
 }

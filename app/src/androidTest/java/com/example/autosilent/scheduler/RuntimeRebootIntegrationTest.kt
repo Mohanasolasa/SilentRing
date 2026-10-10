@@ -56,31 +56,40 @@ class RuntimeRebootIntegrationTest {
             app.repository.deleteSchedule(schedule.id)
         }
 
-        val today = LocalDate.now()
-        val now = LocalTime.now()
+        val zone = ZoneId.systemDefault()
+        val nowInstant = Instant.now()
+        val activeStartInstant = nowInstant.minus(java.time.Duration.ofMinutes(15))
+        val activeEndInstant = nowInstant.plus(java.time.Duration.ofMinutes(45))
+        val activeStartZdt = activeStartInstant.atZone(zone)
+        val activeEndZdt = activeEndInstant.atZone(zone)
 
         // 1. Active schedule during reboot (started 15 mins ago, ends in 45 mins)
         val activeSchedule = Schedule(
             name = "Reboot Active Meeting",
-            startTime = now.minusMinutes(15),
-            endTime = now.plusMinutes(45),
+            startTime = activeStartZdt.toLocalTime(),
+            endTime = activeEndZdt.toLocalTime(),
             recurrenceType = RecurrenceType.DAILY,
-            startDate = today
+            startDate = activeStartZdt.toLocalDate()
         )
         val activeId = app.repository.insertSchedule(activeSchedule)
 
         // 2. Future schedule (starts in 60 mins, ends in 120 mins)
+        val futureStartInstant = nowInstant.plus(java.time.Duration.ofMinutes(60))
+        val futureEndInstant = nowInstant.plus(java.time.Duration.ofMinutes(120))
+        val futureStartZdt = futureStartInstant.atZone(zone)
+        val futureEndZdt = futureEndInstant.atZone(zone)
+
         val futureSchedule = Schedule(
             name = "Reboot Future Study",
-            startTime = now.plusMinutes(60),
-            endTime = now.plusMinutes(120),
+            startTime = futureStartZdt.toLocalTime(),
+            endTime = futureEndZdt.toLocalTime(),
             recurrenceType = RecurrenceType.DAILY,
-            startDate = today
+            startDate = futureStartZdt.toLocalDate()
         )
         val futureId = app.repository.insertSchedule(futureSchedule)
 
         // Perform initial reconciliation
-        val eval = app.reconciler.reconcile(Instant.now(), ZoneId.systemDefault())
+        val eval = app.reconciler.reconcile(nowInstant, zone)
         assertEquals("Desired sound mode must be SILENT during active schedule", SoundMode.SILENT, eval.desiredSoundMode)
         assertEquals(1, eval.activeOccurrences.size)
         assertNotNull("Next boundary event must be scheduled", eval.nextBoundaryEvent)

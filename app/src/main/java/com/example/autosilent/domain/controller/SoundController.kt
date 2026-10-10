@@ -19,6 +19,13 @@ interface SoundController {
     fun getCurrentMode(): SoundMode
 
     /**
+     * Observes continuous updates of the device sound mode.
+     * Default implementation produces a single emission of [getCurrentMode].
+     */
+    fun observeCurrentMode(): kotlinx.coroutines.flow.Flow<SoundMode> =
+        kotlinx.coroutines.flow.flowOf(getCurrentMode())
+
+    /**
      * Requests transitioning the device sound mode to [SoundMode.SILENT].
      *
      * @return true if the device is confirmed in SILENT mode, false if refused or failed.
@@ -43,6 +50,8 @@ interface SoundController {
 
 object NoOpSoundController : SoundController {
     override fun getCurrentMode(): SoundMode = SoundMode.RING
+    override fun observeCurrentMode(): kotlinx.coroutines.flow.Flow<SoundMode> =
+        kotlinx.coroutines.flow.flowOf(SoundMode.RING)
     override fun setSilent(): Boolean = true
     override fun setRing(): Boolean = true
     override fun canControlSound(): Boolean = true

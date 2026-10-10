@@ -77,6 +77,9 @@ class ScheduleRepositoryImpl(
     override suspend fun deleteOverridesForSchedule(scheduleId: Long): Int =
         occurrenceOverrideDao.deleteByScheduleId(scheduleId)
 
+    override suspend fun deleteOverride(scheduleId: Long, occurrenceStart: Instant): Int =
+        occurrenceOverrideDao.deleteByScheduleAndOccurrence(scheduleId, occurrenceStart)
+
     // Private Entity <-> Domain Mappers
     private fun ScheduleEntity.toDomain(): Schedule = Schedule(
         id = id,

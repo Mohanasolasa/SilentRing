@@ -394,6 +394,12 @@ class SoundControlTest {
             overrides.removeAll { it.scheduleId == scheduleId }
             return initial - overrides.size
         }
+
+        override suspend fun deleteOverride(scheduleId: Long, occurrenceStart: Instant): Int {
+            val initial = overrides.size
+            overrides.removeAll { it.scheduleId == scheduleId && it.occurrenceStart == occurrenceStart }
+            return initial - overrides.size
+        }
     }
 
     private class FakeAlarmScheduler : AlarmScheduler {

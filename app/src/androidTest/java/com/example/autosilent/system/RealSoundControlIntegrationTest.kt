@@ -56,10 +56,18 @@ class RealSoundControlIntegrationTest {
             InstrumentationRegistry.getInstrumentation()
                 .uiAutomation
                 .executeShellCommand("cmd appops set com.example.autosilent SCHEDULE_EXACT_ALARM allow")
+                .close()
             InstrumentationRegistry.getInstrumentation()
                 .uiAutomation
                 .executeShellCommand("cmd notification allow_dnd com.example.autosilent")
+                .close()
         } catch (_: Throwable) {}
+
+        var attempts = 0
+        while (!soundController.canControlSound() && attempts < 30) {
+            Thread.sleep(100)
+            attempts++
+        }
 
         // Ensure device starts in NORMAL (RING) ringer mode
         try {
@@ -153,20 +161,24 @@ class RealSoundControlIntegrationTest {
      */
     @Test
     fun testE_ScheduleStarts_ReconcilerSilencesDevice() = runBlocking {
-        val today = LocalDate.now()
-        val now = LocalTime.now()
+        val zone = ZoneId.systemDefault()
+        val nowInstant = Instant.now()
+        val startInstant = nowInstant.minus(java.time.Duration.ofMinutes(10))
+        val endInstant = nowInstant.plus(java.time.Duration.ofMinutes(50))
+        val startZdt = startInstant.atZone(zone)
+        val endZdt = endInstant.atZone(zone)
 
         // Active schedule starting 10 minutes ago, ending 50 minutes from now
         val activeSchedule = Schedule(
             name = "Test E Study",
-            startTime = now.minusMinutes(10),
-            endTime = now.plusMinutes(50),
+            startTime = startZdt.toLocalTime(),
+            endTime = endZdt.toLocalTime(),
             recurrenceType = RecurrenceType.DAILY,
-            startDate = today
+            startDate = startZdt.toLocalDate()
         )
         val id = app.repository.insertSchedule(activeSchedule)
 
-        val eval = app.reconciler.reconcile(Instant.now(), ZoneId.systemDefault())
+        val eval = app.reconciler.reconcile(nowInstant, zone)
         assertEquals("Desired sound mode must be SILENT", SoundMode.SILENT, eval.desiredSoundMode)
         assertEquals("Controller current mode must be SILENT", SoundMode.SILENT, soundController.getCurrentMode())
         assertEquals("Actual Android AudioManager ringer mode must be SILENT", AudioManager.RINGER_MODE_SILENT, audioManager.ringerMode)
@@ -179,16 +191,20 @@ class RealSoundControlIntegrationTest {
      */
     @Test
     fun testF_ScheduleEnds_ReconcilerRestoresRing() = runBlocking {
-        val today = LocalDate.now()
-        val now = LocalTime.now()
+        val zone = ZoneId.systemDefault()
+        val nowInstant = Instant.now()
+        val pastStartInstant = nowInstant.minus(java.time.Duration.ofMinutes(50))
+        val pastEndInstant = nowInstant.minus(java.time.Duration.ofMinutes(10))
+        val pastStartZdt = pastStartInstant.atZone(zone)
+        val pastEndZdt = pastEndInstant.atZone(zone)
 
         // Schedule ended 10 minutes ago
         val pastSchedule = Schedule(
             name = "Test F Completed",
-            startTime = now.minusMinutes(50),
-            endTime = now.minusMinutes(10),
+            startTime = pastStartZdt.toLocalTime(),
+            endTime = pastEndZdt.toLocalTime(),
             recurrenceType = RecurrenceType.DAILY,
-            startDate = today
+            startDate = pastStartZdt.toLocalDate()
         )
         val id = app.repository.insertSchedule(pastSchedule)
 
@@ -196,7 +212,7 @@ class RealSoundControlIntegrationTest {
         soundController.setSilent()
         assertEquals(AudioManager.RINGER_MODE_SILENT, audioManager.ringerMode)
 
-        val eval = app.reconciler.reconcile(Instant.now(), ZoneId.systemDefault())
+        val eval = app.reconciler.reconcile(nowInstant, zone)
         assertEquals("Desired sound mode must be RING when no active schedule exists", SoundMode.RING, eval.desiredSoundMode)
         assertEquals("Controller current mode must be RING", SoundMode.RING, soundController.getCurrentMode())
         assertEquals("Actual Android AudioManager ringer mode must be NORMAL", AudioManager.RINGER_MODE_NORMAL, audioManager.ringerMode)
@@ -268,20 +284,22 @@ class RealSoundControlIntegrationTest {
     @Test
     fun testH_ManualOverride_RestoresRingWithoutLoop() = runBlocking {
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now()
-        val nowTime = LocalTime.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES)
+        val nowInstant = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+        val startInstant = nowInstant.minus(java.time.Duration.ofMinutes(15))
+        val endInstant = nowInstant.plus(java.time.Duration.ofMinutes(45))
+        val startZdt = startInstant.atZone(zone)
+        val endZdt = endInstant.atZone(zone)
 
         val schedule = Schedule(
             name = "Test H Focus",
-            startTime = nowTime.minusMinutes(15),
-            endTime = nowTime.plusMinutes(45),
+            startTime = startZdt.toLocalTime(),
+            endTime = endZdt.toLocalTime(),
             recurrenceType = RecurrenceType.DAILY,
-            startDate = today
+            startDate = startZdt.toLocalDate()
         )
         val id = app.repository.insertSchedule(schedule)
 
         // Initial state -> SILENT
-        val nowInstant = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
         val evalInitial = app.reconciler.reconcile(nowInstant, zone)
         assertEquals(SoundMode.SILENT, evalInitial.desiredSoundMode)
         assertEquals(AudioManager.RINGER_MODE_SILENT, audioManager.ringerMode)

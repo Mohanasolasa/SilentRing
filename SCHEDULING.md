@@ -135,6 +135,10 @@ When an alarm receiver wakes up:
 2. If the current time is substantially past the expected timestamp or invalid, run a fresh reconciliation rather than blind execution.
 3. Alarms serve strictly as **wake-up triggers**. The Schedule Engine evaluates the current clock time against the database to determine the actual target state.
 
+### 5.4 Exact-Alarm Policy & Absence of Inexact Fallback
+* When `AlarmManager.canScheduleExactAlarms()` returns `false`, `AndroidAlarmScheduler` refuses scheduling and logs `SCHEDULING_FAILED`.
+* **No Inexact Fallback**: The app intentionally does NOT fall back to `setWindow()` or `setAndAllowWhileIdle()`, as windowed alarms can drift by minutes or hours, causing severe disruptions during meetings or quiet hours. Exact alarms are required for reliable operation.
+
 ---
 
 ## 6. Missed Event Recovery, Reboot & Time Change Reconciliation
@@ -173,7 +177,8 @@ suspend fun reconcile(currentTime: ZonedDateTime = ZonedDateTime.now()) {
 ```
 
 ### 6.1 Reboot Recovery
-* Handled by `BootReceiver` listening to `ACTION_BOOT_COMPLETED` and `ACTION_LOCKED_BOOT_COMPLETED`.
+* Handled by `BootReceiver` listening to `ACTION_BOOT_COMPLETED`.
+* Runs after the user unlocks the device, when Room credential-encrypted database storage is accessible.
 * Immediately invokes `reconcile()`. Alarms are re-registered with `AlarmManager`.
 
 ### 6.2 Date/Time & Timezone Changes
